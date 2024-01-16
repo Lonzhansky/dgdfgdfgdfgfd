@@ -1,0 +1,142 @@
+SELECT 
+  sh.*, 
+  b.rp,
+  b.part_rn,
+  b.legal_rn,
+  b.doctype,
+  b.docnum,
+  b.docdate,
+  b.srctype,
+  b.srcnum,
+  b.srcdate,
+  b.orgfr,
+  b.orgreqfr,
+  b.orgto,
+  b.orgreqto,
+  b.acc_rn,
+  b.store,
+  b.person,
+  b.clubcard,
+  b.tarif,
+  b.currency,
+  b.docsum,
+  b.discount,
+  b.brutto,
+  b.tax_in,
+  b.canceled,
+  b.dateotr,
+  b.sample,
+  b.comments,
+  --b.xtotal,
+  b.docsum - b.discount AS xtotal,
+  --b.xdoctype,
+  t1.doctag AS xdoctype,
+  --b.xdocattrib,
+  get_doc_mnemo(m.rn) AS xdocattrib,
+  --b.xsrctype,
+  t2.doctag AS xsrctype,
+  --b.xorgfr,
+  c1.mnemo AS xorgfr,
+  --b.xorgto,
+  c2.mnemo AS xorgto,
+  --b.xstore,
+  ss.mnemo AS xstore,
+  --b.xaddress,
+  ss.hallobj IS NOT NULL AS xaddress,
+  --b.xmvo,
+  mvo.mnemo AS xmvo,
+  --b.xcurrency,
+  r.ciso AS xcurrency,
+  --b.xrn,
+  h.rn AS xrn,
+  --b.paydateto,
+  h.paydateto,
+  --b.paydate,
+  h.paydate,
+  --b.paysum,
+  COALESCE(h.paysum, 0) AS paysum,
+  h.wosum,
+  h.risum,
+  h.dvmol,
+  h.dvnum,
+  h.dvdate,
+  h.reserved,
+  --b.xdate_link,
+  (SELECT max(date_link) FROM storelink WHERE doc_rn = m.rn) AS xdate_link,
+  --b.xpaydate,
+  COALESCE(h.paydate, (SELECT max(COALESCE(cd.paydate, ch.paydate))
+    FROM doclink l
+      LEFT JOIN cdbase cd ON l.doc_fr = cd.rp
+      LEFT JOIN chbase ch ON l.doc_fr = ch.rp
+    WHERE l.doc_to = m.rn)
+  ) AS xpaydate,
+  --b.goods,
+  EXISTS (SELECT sp.rn FROM docspec sp INNER JOIN nobase n ON n.rn = sp.nopos_rn AND n.notype IN (0,5)
+    WHERE sp.rp = m.rn LIMIT 1) AS goods,
+  --b.xpart_fr,
+  get_doc_part_fr(m.rn) AS xpart_fr,
+  --b.xin_arch,
+  CASE WHEN EXISTS (SELECT rn FROM archbase WHERE doc_rn = m.rn) THEN '+' ELSE ' ' END AS xin_arch,
+  --b.xlegalentity,
+  le.mnemo AS xlegalentity,
+  --b.ptahrt,
+  (SELECT MAX(api.rt) FROM apiptahbase api WHERE api.rp = m.rn) AS ptahrt,
+  s.rn, 
+  s.nopos_rn, 
+  s.nomod_rn, 
+  s.nopack_rn, 
+  s.batch_rn, 
+  s.quant, 
+  s.quantdop, 
+  s.brutto AS spec_brutto, 
+  --s.xnoname, 
+  COALESCE(nms.origname, ns.noname) AS xnoname,
+  --s.xnomne, 
+  COALESCE(nms.modmne, ns.nomne) AS xnomne,
+  --s.xnotype, 
+  ns.notype AS xnotype,
+  --s.xpack, 
+  get_pack_mnemo(s.nopack_rn) AS xpack,
+  --s.xpkquant, 
+  pks.quantity AS xpkquant,
+  --s.xbasemea, 
+  ns.basemea AS xbasemea,
+  --s.xdopmea, 
+  ns.dopmea AS xdopmea,
+  --s.xbasemea_mne, 
+  ms.memne AS xbasemea_mne,
+  --s.xbatch, 
+  bs.batchnum AS xbatch,
+  --s.xbatchdate, 
+  bs.batchdate AS xbatchdate,
+  --s.xbarcode,
+  nobarcode_list(s.nomod_rn) AS xbarcode,
+  (SELECT sign_shipped_rn FROM wbbase WHERE rn = h.rn) AS sign_shipped_rn,
+  m.modmne AS package_modmne,
+  (CASE WHEN sh.package IS NOT NULL THEN s.brutto - s.quant ELSE 0 END) AS package_brutto,
+  (CASE WHEN sh.is_product = 1 THEN s.quant ELSE s.brutto END) AS weight
+FROM shipment sh 
+  --INNER JOIN vwbbase b ON b.rn = sh.doc_rp 
+  INNER JOIN docbase b ON b.rn = sh.doc_rp
+  --INNER JOIN parts p   ON p.rn = b.part_rn AND upper(p.partcode) = 'WBBASE'
+  LEFT JOIN wbbase h   ON h.rp = b.rn
+  LEFT JOIN doctype t1 ON t1.rn = b.doctype
+  LEFT JOIN doctype t2 ON t2.rn = b.srctype
+  LEFT JOIN cabase c1  ON c1.rn = b.orgfr
+  LEFT JOIN cabase c2  ON c2.rn = b.orgto
+  LEFT JOIN stores ss   ON ss.rn = b.store
+  LEFT JOIN cabase mvo ON mvo.rn = ss.mvo_rn
+  LEFT JOIN currbase r ON r.rn = b.currency
+  LEFT JOIN legalentity le ON le.rn = b.legal_rn
+  --INNER JOIN vwbspec s ON b.rn = s.rp AND sh.spec_rp = s.rn 
+  LEFT JOIN nomodif m  ON sh.package = m.rn 
+  INNER JOIN docspec s ON b.rn = s.rp AND sh.spec_rp = s.rn 
+  LEFT JOIN nobase ns   ON ns.rn = s.nopos_rn
+  LEFT JOIN nomodif nms ON nms.rn = s.nomod_rn
+  LEFT JOIN batches bs  ON bs.rn = s.batch_rn
+  LEFT JOIN nopack pks  ON pks.rn = s.nopack_rn
+  LEFT JOIN mebase ms   ON ms.rn = ns.basemea
+
+WHERE docnum = '14'
+  
+ORDER BY s.rn;
